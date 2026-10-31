@@ -1,0 +1,16 @@
+{
+  "name": "componenthub",
+  "version": "1.0.0",
+  "description": "P2P Component Exchange & Lab Inventory for engineering students",
+  "scripts": {
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "seed": "cd server && node seed/index.js",
+    "dev:server": "cd server && node index.js",
+    "dev:client": "cd client && npm run dev",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "setup": "npm run install:all && npm run seed",
+    "start": "npm run dev"
+  },
+  "author": "Pulith Thewmika (IT23656338)",
+  "license": "MIT"
+}
