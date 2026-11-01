@@ -8,7 +8,7 @@ ComponentHub is a full-stack web application designed for university engineering
 
 The platform features a complete peer-to-peer workflow: list a component with details and images, browse and search for what you need, submit a borrow request with dates and a message, and the owner approves or denies. After returning the item, both parties can leave star ratings and reviews. Built-in messaging, notifications, wishlists, and a rich analytics dashboard round out the experience.
 
-Every feature performs real CRUD operations against a SQLite database. The seed data includes 27 realistic users, 79 electronic components across 10 categories, 48 borrow requests, 35+ reviews, 60 notifications, 25 messages, and 120 activity log entries — all with Sri Lankan names, realistic bios, and dates spanning six months for meaningful chart data.
+Every feature performs real CRUD operations against a SQLite database. The seed data includes 27 realistic users, 79 electronic components across 10 categories, 48 borrow requests, 35+ reviews, 60 notifications, 25 messages, and 120 activity log entries.
 
 ## ✅ Features
 
