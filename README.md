@@ -302,6 +302,6 @@ MIT
 
 ## 👤 Author
 
-**Pulith Thewmika** — IT23656338
+Senuk Yuthmika - EG/2023/5993
 EC4307 Web Application Development
 University of Ruhuna (UOR)
