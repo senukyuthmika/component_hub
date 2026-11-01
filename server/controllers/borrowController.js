@@ -34,6 +34,17 @@ exports.create = (req, res) => {
     ).run(component.owner_id, 'request_received', 'New Borrow Request',
       `${req.user.full_name} wants to borrow "${component.title}"`, result.lastInsertRowid);
 
+    // Also notify lab coordinators (lab_admin / superadmin) if they are not already the lender or requester
+    const coordinators = db.prepare("SELECT id FROM users WHERE role IN ('lab_admin', 'superadmin')").all();
+    for (const coord of coordinators) {
+      if (coord.id !== component.owner_id && coord.id !== req.user.id) {
+        db.prepare(
+          `INSERT INTO notifications (user_id, type, title, message, related_id) VALUES (?, ?, ?, ?, ?)`
+        ).run(coord.id, 'request_received', 'New Campus Borrow Request',
+          `${req.user.full_name} requested "${component.title}" (${component.location || 'Campus'})`, result.lastInsertRowid);
+      }
+    }
+
     // Log activity
     db.prepare('INSERT INTO activity_log (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)')
       .run(req.user.id, 'create_request', 'borrow_request', result.lastInsertRowid,
@@ -49,14 +60,29 @@ exports.create = (req, res) => {
 exports.getIncoming = (req, res) => {
   try {
     const db = getDb();
-    const requests = db.prepare(
-      `SELECT br.*, c.title as component_title, c.image_urls, c.condition,
-       u.full_name as requester_name, u.avatar_url as requester_avatar, u.rating as requester_rating
-       FROM borrow_requests br
-       JOIN components c ON br.component_id = c.id
-       JOIN users u ON br.requester_id = u.id
-       WHERE br.lender_id = ? ORDER BY br.created_at DESC`
-    ).all(req.user.id);
+    const isCoordinator = req.user.role === 'lab_admin' || req.user.role === 'superadmin';
+
+    // Lab coordinators oversee all campus and lab requests; standard students see requests where they are the lender
+    const query = isCoordinator
+      ? `SELECT br.*, c.title as component_title, c.image_urls, c.condition, c.location as component_location,
+         u.full_name as requester_name, u.avatar_url as requester_avatar, u.rating as requester_rating,
+         lend.full_name as lender_name, lend.avatar_url as lender_avatar
+         FROM borrow_requests br
+         JOIN components c ON br.component_id = c.id
+         JOIN users u ON br.requester_id = u.id
+         JOIN users lend ON br.lender_id = lend.id
+         ORDER BY br.created_at DESC`
+      : `SELECT br.*, c.title as component_title, c.image_urls, c.condition, c.location as component_location,
+         u.full_name as requester_name, u.avatar_url as requester_avatar, u.rating as requester_rating,
+         lend.full_name as lender_name, lend.avatar_url as lender_avatar
+         FROM borrow_requests br
+         JOIN components c ON br.component_id = c.id
+         JOIN users u ON br.requester_id = u.id
+         JOIN users lend ON br.lender_id = lend.id
+         WHERE br.lender_id = ?
+         ORDER BY br.created_at DESC`;
+
+    const requests = isCoordinator ? db.prepare(query).all() : db.prepare(query).all(req.user.id);
 
     res.json({
       success: true,
@@ -71,7 +97,7 @@ exports.getOutgoing = (req, res) => {
   try {
     const db = getDb();
     const requests = db.prepare(
-      `SELECT br.*, c.title as component_title, c.image_urls, c.condition,
+      `SELECT br.*, c.title as component_title, c.image_urls, c.condition, c.location as component_location,
        u.full_name as lender_name, u.avatar_url as lender_avatar
        FROM borrow_requests br
        JOIN components c ON br.component_id = c.id
@@ -98,9 +124,17 @@ exports.updateStatus = (req, res) => {
       return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Request not found' } });
     }
 
+    const isCoordinator = req.user.role === 'lab_admin' || req.user.role === 'superadmin';
+
     if (status === 'approved' || status === 'denied') {
-      if (request.lender_id !== req.user.id) {
-        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only the lender can approve/deny' } });
+      if (request.lender_id !== req.user.id && !isCoordinator) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only the lender or lab coordinator can approve/deny' } });
+      }
+    }
+
+    if (status === 'returned') {
+      if (request.lender_id !== req.user.id && request.requester_id !== req.user.id && !isCoordinator) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Not authorized to mark returned' } });
       }
     }
 
@@ -122,12 +156,19 @@ exports.updateStatus = (req, res) => {
     // Notifications
     const component = db.prepare('SELECT title FROM components WHERE id = ?').get(request.component_id);
     const notifType = status === 'approved' ? 'request_approved' : status === 'denied' ? 'request_denied' : 'item_returned';
-    const notifUser = status === 'returned' ? request.lender_id : request.requester_id;
     const notifTitle = status === 'approved' ? 'Request Approved' : status === 'denied' ? 'Request Denied' : 'Item Returned';
 
+    // Notify requester
     db.prepare('INSERT INTO notifications (user_id, type, title, message, related_id) VALUES (?, ?, ?, ?, ?)')
-      .run(notifUser, notifType, notifTitle,
+      .run(request.requester_id, notifType, notifTitle,
         `"${component.title}" request has been ${status}`, req.params.id);
+
+    // If approved/denied by lab coordinator and coordinator is not the direct lender, also notify the owner/lender
+    if (request.lender_id !== req.user.id) {
+      db.prepare('INSERT INTO notifications (user_id, type, title, message, related_id) VALUES (?, ?, ?, ?, ?)')
+        .run(request.lender_id, notifType, notifTitle,
+          `"${component.title}" borrow request was ${status} by Lab Coordinator`, req.params.id);
+    }
 
     const updated = db.prepare('SELECT * FROM borrow_requests WHERE id = ?').get(req.params.id);
     res.json({ success: true, data: updated });
@@ -144,8 +185,9 @@ exports.cancel = (req, res) => {
     if (!request) {
       return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Request not found' } });
     }
-    if (request.requester_id !== req.user.id) {
-      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only the requester can cancel' } });
+    const isCoordinator = req.user.role === 'lab_admin' || req.user.role === 'superadmin';
+    if (request.requester_id !== req.user.id && !isCoordinator) {
+      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only the requester or coordinator can cancel' } });
     }
     if (request.status !== 'pending') {
       return res.status(400).json({ success: false, error: { code: 'INVALID_STATUS', message: 'Can only cancel pending requests' } });
@@ -162,11 +204,10 @@ exports.getAll = (req, res) => {
   try {
     const db = getDb();
     const requests = db.prepare(
-      `SELECT br.*, c.title as component_title,
+      `SELECT br.*, c.title as component_title, c.location as component_location,
        req.full_name as requester_name, lend.full_name as lender_name
        FROM borrow_requests br
        JOIN components c ON br.component_id = c.id
-       JOIN users u ON br.requester_id = u.id
        JOIN users req ON br.requester_id = req.id
        JOIN users lend ON br.lender_id = lend.id
        ORDER BY br.created_at DESC`

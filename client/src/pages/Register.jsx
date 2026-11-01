@@ -160,7 +160,7 @@ export default function Register() {
                     value={form.email} 
                     onChange={e => setForm({...form, email: e.target.value})} 
                     className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#07131F] text-gray-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-[#00C26F] focus:border-transparent transition-all" 
-                    placeholder="student@sliit.lk"
+                    placeholder="student@uor.lk"
                   />
                 </div>
                 {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}

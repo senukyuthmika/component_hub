@@ -980,7 +980,7 @@ export default function Landing() {
                       required
                       value={contactForm.email}
                       onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                      placeholder="e.g. student@sliit.lk"
+                      placeholder="e.g. student@uor.lk"
                       className="w-full px-4 py-3 rounded-lg bg-white dark:bg-[#07131F] border border-gray-200 dark:border-white/10 text-sm text-gray-900 dark:text-white outline-none focus:border-[#00C26F]"
                     />
                   </div>

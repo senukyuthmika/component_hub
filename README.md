@@ -304,4 +304,4 @@ MIT
 
 **Pulith Thewmika** — IT23656338
 EC4307 Web Application Development
-Sri Lanka Institute of Information Technology (SLIIT)
+University of Ruhuna (UOR)
