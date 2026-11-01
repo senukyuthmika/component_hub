@@ -1,5 +1,19 @@
 const { getDb } = require('../config/database');
 
+function safeJsonParse(val, fallback = []) {
+  if (!val) return fallback;
+  if (typeof val !== 'string') return Array.isArray(val) ? val : fallback;
+  try {
+    return JSON.parse(val);
+  } catch {
+    const trimmed = val.trim();
+    if (trimmed) {
+      return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return fallback;
+  }
+}
+
 exports.getUser = (req, res) => {
   try {
     const db = getDb();
@@ -23,7 +37,7 @@ exports.getUser = (req, res) => {
       success: true,
       data: {
         ...user,
-        components: components.map(c => ({ ...c, tags: JSON.parse(c.tags || '[]'), image_urls: JSON.parse(c.image_urls || '[]') })),
+        components: components.map(c => ({ ...c, tags: safeJsonParse(c.tags), image_urls: safeJsonParse(c.image_urls) })),
         reviews
       }
     });

@@ -1,5 +1,36 @@
 const { getDb } = require('../config/database');
 
+function formatTags(tags) {
+  if (!tags) return '[]';
+  if (Array.isArray(tags)) return JSON.stringify(tags);
+  if (typeof tags === 'string') {
+    const trimmed = tags.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return JSON.stringify(parsed);
+      } catch {}
+    }
+    const list = trimmed.split(',').map(t => t.trim()).filter(Boolean);
+    return JSON.stringify(list);
+  }
+  return '[]';
+}
+
+function safeJsonParse(val, fallback = []) {
+  if (!val) return fallback;
+  if (typeof val !== 'string') return Array.isArray(val) ? val : fallback;
+  try {
+    return JSON.parse(val);
+  } catch {
+    const trimmed = val.trim();
+    if (trimmed) {
+      return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return fallback;
+  }
+}
+
 exports.getAll = (req, res) => {
   try {
     const db = getDb();
@@ -43,7 +74,7 @@ exports.getAll = (req, res) => {
     res.json({
       success: true,
       data: {
-        components: components.map(c => ({ ...c, tags: JSON.parse(c.tags || '[]'), image_urls: JSON.parse(c.image_urls || '[]') })),
+        components: components.map(c => ({ ...c, tags: safeJsonParse(c.tags), image_urls: safeJsonParse(c.image_urls) })),
         pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / parseInt(limit)) }
       }
     });
@@ -83,9 +114,9 @@ exports.getById = (req, res) => {
       success: true,
       data: {
         ...component,
-        tags: JSON.parse(component.tags || '[]'),
-        image_urls: JSON.parse(component.image_urls || '[]'),
-        similar: similar.map(s => ({ ...s, tags: JSON.parse(s.tags || '[]'), image_urls: JSON.parse(s.image_urls || '[]') }))
+        tags: safeJsonParse(component.tags),
+        image_urls: safeJsonParse(component.image_urls),
+        similar: similar.map(s => ({ ...s, tags: safeJsonParse(s.tags), image_urls: safeJsonParse(s.image_urls) }))
       }
     });
   } catch (err) {
@@ -103,7 +134,7 @@ exports.create = (req, res) => {
       image_urls = req.files.map(f => '/uploads/' + f.filename);
     }
 
-    const parsedTags = typeof tags === 'string' ? tags : JSON.stringify(tags || []);
+    const parsedTags = formatTags(tags);
     const availQty = parseInt(quantity) || 1;
 
     const result = db.prepare(
@@ -125,7 +156,7 @@ exports.create = (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: { ...component, tags: JSON.parse(component.tags || '[]'), image_urls: JSON.parse(component.image_urls || '[]') }
+      data: { ...component, tags: safeJsonParse(component.tags), image_urls: safeJsonParse(component.image_urls) }
     });
   } catch (err) {
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: err.message } });
@@ -149,11 +180,11 @@ exports.update = (req, res) => {
     let image_urls = component.image_urls;
     if (req.files && req.files.length > 0) {
       const newImages = req.files.map(f => '/uploads/' + f.filename);
-      const existing = JSON.parse(component.image_urls || '[]');
+      const existing = safeJsonParse(component.image_urls, []);
       image_urls = JSON.stringify([...existing, ...newImages]);
     }
 
-    const parsedTags = tags ? (typeof tags === 'string' ? tags : JSON.stringify(tags)) : component.tags;
+    const parsedTags = tags !== undefined ? formatTags(tags) : component.tags;
 
     db.prepare(
       `UPDATE components SET category_id = COALESCE(?, category_id), title = COALESCE(?, title),
@@ -173,7 +204,7 @@ exports.update = (req, res) => {
 
     res.json({
       success: true,
-      data: { ...updated, tags: JSON.parse(updated.tags || '[]'), image_urls: JSON.parse(updated.image_urls || '[]') }
+      data: { ...updated, tags: safeJsonParse(updated.tags), image_urls: safeJsonParse(updated.image_urls) }
     });
   } catch (err) {
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: err.message } });
@@ -213,7 +244,7 @@ exports.getMyListings = (req, res) => {
 
     res.json({
       success: true,
-      data: components.map(c => ({ ...c, tags: JSON.parse(c.tags || '[]'), image_urls: JSON.parse(c.image_urls || '[]') }))
+      data: components.map(c => ({ ...c, tags: safeJsonParse(c.tags), image_urls: safeJsonParse(c.image_urls) }))
     });
   } catch (err) {
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: err.message } });

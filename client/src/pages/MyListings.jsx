@@ -34,7 +34,16 @@ export default function MyListings() {
     e.preventDefault();
     if (!form.title || !form.category_id) return toast.error('Title and category are required');
     const fd = new FormData();
-    Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null) fd.append(k, v); });
+    Object.entries(form).forEach(([k, v]) => { 
+      if (v !== '' && v !== null) {
+        if (k === 'tags' && typeof v === 'string') {
+          const tagsArray = v.split(',').map(t => t.trim()).filter(Boolean);
+          fd.append(k, JSON.stringify(tagsArray));
+        } else {
+          fd.append(k, v);
+        }
+      } 
+    });
     files.forEach(f => fd.append('images', f));
 
     try {
